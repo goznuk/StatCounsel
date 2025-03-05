@@ -1,0 +1,187 @@
+생존분석 기법 및 모델 평가 방법
+1. Random Survival Forest (RSF)
+1-1. 개요
+Random Survival Forest(RSF)는 기존의 랜덤 포레스트(Random Forest)를 생존분석에 적용한 방법으로, 시간-사건 데이터(time-to-event data)를 분석할 수 있도록 확장된 모델이다. 랜덤 포레스트가 다수의 의사결정나무(Decision Tree)를 앙상블하여 예측 성능을 높이는 방식과 유사하게, RSF는 생존 데이터에서 여러 개의 생존 나무(Survival Tree)를 훈련하고 이들의 결과를 종합하여 예측한다.
+1-2. 특징
+* 비모수적(non-parametric) 방법: 특정한 분포 가정을 필요로 하지 않으며 데이터의 구조를 유연하게 반영할 수 있다.
+* 검열 데이터(censored data) 처리: 일반적인 회귀 및 분류 모델과 달리 생존시간 데이터에서 검열(censoring)된 값을 효과적으로 처리할 수 있다.
+* 생존 확률 및 누적위험 계산: 개별 노드에서 누적위험률(cumulative hazard rate)과 생존 확률(survival rate)을 계산하여 예측을 수행한다.
+2. DeepSurv
+2-1. 개요
+DeepSurv는 신경망(Neural Network, NN) 기반의 생존분석 모델로, Cox 비례위험 모형(Cox Proportional Hazard Model, CoxPH)을 확장한 형태이다. 딥러닝 기법을 적용하여 복잡한 변수 간의 관계를 학습하고, 개인별 생존 리스크를 예측할 수 있도록 설계되었다. 비례위험 가정 $h(t|X) = h_0(t) * exp(r(X))$에서 $r(X)$를 추정하는 과정에서 DeepSurv라는 딥러닝 기법을 적용했다.
+2-2. 특징
+* 비선형 관계 학습: 기존의 CoxPH 모델이 선형 가정을 따르는 것과 달리, DeepSurv는 심층 신경망을 활용하여 비선형적인 변수 관계를 학습할 수 있다.
+* 위험 함수(risk function) 예측: 모델이 학습한 위험 함수를 활용하여 개인별 생존 가능성을 예측할 수 있으며, 이는 CoxPH 모델의 위험 함수와 유사한 방식으로 해석할 수 있다.
+* 손실 함수: CoxPH에서 사용되는 부분 가능도(negative logarithmic partial likelihood) 함수를 손실 함수로 사용하여 최적의 가중치를 학습한다.
+3. TabNet
+3-1. 개요
+TabNet은 테이블 데이터(Tabular Data, 정형 데이터) 처리에 특화된 딥러닝 모델로, 어텐션 메커니즘을 활용하여 데이터를 학습하는 방식이다. 생존분석에서의 적용 사례가 드물지만, 본 논문에서 생존분석을 위해 CoxPH의 손실 함수를 적용하여 TabNet을 사용하였다. DeepSurv와 마찬가지로 비례위험 가정을 두고 있고, $r(X)$를 추정하는 과정에서 TabNet 알고리즘을 적용했다.
+3-2. 특징
+* 어텐션 메커니즘 활용: TabNet은 학습 과정에서 각 변수(feature)에 대한 어텐션(attention) 가중치를 학습하여 중요한 변수에 집중할 수 있도록 한다.
+* 해석 가능성: 기존의 딥러닝 모델보다 해석 가능성이 높아, 의료 및 생명과학 분야에서 신뢰할 수 있는 모델로 활용될 가능성이 크다.
+* 생존분석 적용: 본 연구에서는 TabNet의 기본 손실 함수를 CoxPH 기반의 손실 함수로 변경하여 생존분석 문제에 적용하였다.
+4. 모델의 설명 가능성(Explainability) 분석
+위에 기술한 3가지 분석 방법은 머신러닝 방법을 이용했고, 전통적인 CoxPH에 비해 모델 해석이 어렵다는 단점이 있다. 머신러닝 기법에서는 Feature Importance 등의 방법을 이용하여, 모델에서 중요하게 사용된 변수를 중요도를 계산함으로서 모델 결과 해석에 도움을 줄 수 있다. 본 논문에서는 두 가지 주요 설명 가능성 분석 기법을 적용하였다.
+(1) Permutation Feature Importance
+* 변수의 중요도를 평가하는 방법으로, 원본 데이터와 특정 변수를 랜덤하게 섞은 데이터의 모델 성능 차이를 비교하여 변수의 중요도를 측정한다.
+* 중요한 변수일수록 변형된 데이터에서 모델 성능이 크게 감소하며, 이를 통해 변수별 영향도를 확인할 수 있다.
+(2) SHAP (SHapley Additive exPlanations)
+* SHAP은 머신러닝 모델에서 개별 변수(feature)가 예측 결과에 미치는 영향을 정량적으로 분석하는 방법이다.
+* 변수 간의 모든 가능한 상호작용을 고려하여 특정 변수의 기여도를 계산할 수 있다.
+* 모델이 특정 결과를 도출한 이유를 설명하는 데 활용할 수 있으며, 특히 비선형 모델(예: DeepSurv, TabNet)에서 해석력을 높이는 데 유용하다.
+5. 모델 평가 지표
+본 논문에서는 모델의 성능을 평가하기 위해 Concordance-Index (C-Index), Integrated Brier Score (IBS), Cumulative AUC (Area Under the Curve) 세 가지 주요 지표를 활용하였다.
+5-1. Concordance Index (C-Index, 순위 일관성 지수)
+\begin{equation} C = \frac{\sum_{i,j} I(T_i < T_j) I(\hat{r}_i > \hat{r}_j)}{\sum_{i,j} I(T_i < T_j)} \end{equation}
+* 정의: C-Index는 예측된 위험도(risk score)와 실제 생존 시간의 일관성을 측정하는 지표이다.
+* 설명: 두 개의 비교 가능한 샘플 $(i, j)$에 대해, 실제로 생존 시간이 짧은 샘플이 더 높은 위험도($\hat{r}$)를 갖는 경우 해당 예측이 올바른 것으로 간주된다.
+* 해석:
+    * $C = 1$이면 모델이 완벽하게 예측한 것이며, $C = 0.5$는 무작위 예측과 동일한 수준을 의미한다.
+
+5-2. Integrated Brier Score (IBS, 통합 Brier 점수)
+\begin{equation} IBS = \int_0^{t_{\max}} \frac{1}{N} \sum_{i=1}^{N} (S(t | X_i) - Y_i(t))^2 dt \end{equation}
+* 정의: Brier Score는 특정 시간 $t$에서 실제 생존 여부와 예측된 생존 확률 간의 평균 제곱 오차(Mean Squared Error, MSE)를 측정하는 지표이다.
+* 설명:
+    * censoring(중도 절단)을 고려한 생존 분석에 적합한 지표이며,
+    * 특정 시점이 아닌 여러 시점에 걸쳐 측정된 값을 통합하여 시간 전반에 걸친 예측 오류를 평가한다.
+* 해석:
+    * Brier Score가 0에 가까울수록 모델의 예측 정확도가 높음을 의미한다.
+    * 본 논문에서는 이벤트 발생 시간의 10% 단위(quantile)마다 Brier Score를 계산하여 비교하였다.
+
+5-3. Cumulative Area Under the Curve (Cumulative AUC, 누적 AUC)
+\begin{equation} AUC(t) = P(\hat{r}_i > \hat{r}_j | T_i \leq t, T_j > t) \end{equation}
+* 정의: 누적 AUC는 특정 시간 $t$까지 이벤트(사건)가 발생한 개체와 아직 생존한 개체 간의 위험도(risk score) 차이를 비교하는 지표이다.
+* 설명:
+    * 일반적인 ROC-AUC(Receiver Operating Characteristic-AUC) 지표를 우측 절단(right-censored) 데이터에 맞춰 변형한 형태이다.
+    * 모델이 특정 시점 $t$까지 사망한 개체가 생존한 개체보다 높은 위험도를 가질 확률을 측정한다.
+* 해석:
+    * $AUC=1$이면 완벽한 예측,
+    * $AUC=0.5$는 무작위 예측과 동일한 수준이다.
+    * 본 연구에서는 이벤트 발생 시간의 10% 단위(quantile)마다 AUC를 계산한 후 평균값을 도출하였다. 우리의 상황에 적용한 코드에는, 코드의 작동을 위해, 테스트 데이터 범위 내에서 균등한 시간 포인트들을 생성하는 것으로 수정하였다.
+
+결론
+본 연구에서는 생존분석을 위해 CoxPH, RSF, DeepSurv, TabNet 네 가지 모델을 비교하고, 모델의 설명 가능성을 높이기 위해 SHAP 및 Permutation Feature Importance 기법을 활용하였다. 또한 C-Index, IBS, Cumulative AUC를 통해 모델 성능을 정량적으로 평가하였다. 본 연구의 결과는 생존분석 모델의 선택 및 해석 가능성을 높이는 데 기여할 것으로 기대된다.
+
+
+
+
+
+본 논문의 모델 학습 방법을 구체적으로 보면 다음과 같다.
+3. 모델 학습 방법
+(0) 전처리
+머신러닝 방법에 적용 전, 범주형 변수들을 인코딩해야 한다. RSF에서와 DeepSurv에서는 One-hot encoding을 사용했고, TabNet에는 Label encoding을 사용했다.
+(One-hot encoding 설명)
+(Label encoding 설명)
+(1) 교차 검증 (Cross Validation)
+교차 검증(Cross Validation)은 데이터셋을 여러 개의 부분 집합(fold)으로 나누어 모델을 학습하고 평가하는 기법이다. 본 연구에서는 5-fold cross validation을 적용하였다. 5개의 폴드로 데이터를 나누고, 4개를 학습(training) 데이터로, 1개를 검증(validation) 데이터로 사용하며 이를 반복하여 모델의 일반화 성능을 평가한다.
+(2) 하이퍼파라미터 튜닝
+각 모델의 최적 성능을 찾기 위해 하이퍼파라미터 최적화를 수행하였다. 본 연구에서는 Optuna를 사용하여 하이퍼파라미터 탐색을 진행하였다. Optuna는 다음과 같은 과정을 따른다:
+1. 미리 정의된 하이퍼파라미터 범위에서 무작위로 값을 선택(trial)한다.
+2. 선택된 하이퍼파라미터를 사용하여 모델을 학습하고 성능을 평가한다.
+3. 50번의 trial을 반복한 후, evaluation set에 대해 가장 높은 Concordance Index(C-Index)를 가진 하이퍼파라미터를 최종 모델에 적용한다.
+Optuna의 설정값은 config.yaml 파일에서 정의되어 있으며, 각 모델별 적절한 하이퍼파라미터의 범위를 설정하여 탐색하였다.
+(3) 모델 간 비교
+최적의 하이퍼파라미터를 찾은 후, 이를 이용하여 모델을 학습하고 성능을 비교하였다. 모델 비교는 다음 세 가지 평가 지표를 기반으로 수행되었다:
+* Concordance Index (C-Index): 예측된 위험도와 실제 생존시간 간의 일관성을 평가.
+* Integrated Brier Score (IBS): 생존 확률 예측과 실제 이벤트 발생 여부 간의 오차 측정.
+* Cumulative AUC: 특정 시간에서 예측된 위험도가 실제 생존 결과와 얼마나 일치하는지를 평가.
+5-fold cross validation을 통해 각 모델의 성능을 측정하고, 분할(split) 방식에 따라 성능 차이가 존재할 수 있음을 고려하여 실험을 진행하였다.
+  
+-머신러닝 방법 비교 전 비례위험 가정 검정의 필요성
+DeepSurv와 TabNet을 활용한 모델은 비례위험 가정(Proportional Hazards Assumption)을 기반으로 한 생존 분석 모델이다. 반면, Random Survival Forest(RSF)는 비례위험 가정을 요구하지 않는다. 따라서, DeepSurv와 TabNet을 적용하기 전에 비례위험 가정이 충족되는지 검증하는 과정이 필요하다. 이를 통해 모델 사용의 타당성을 높이고, 분석 결과의 신뢰성을 확보할 수 있다.
+
+1. 비례위험 가정에 대한 통계적 검정
+비례위험 가정을 검정하는 대표적인 방법 중 하나가 **Schoenfeld 잔차 검정(Schoenfeld Residual Test)**이다.
+1.1 Schoenfeld 잔차 검정
+Schoenfeld 잔차 검정(Grambsch & Therneau, 1994)은 비례위험 가정이 성립하는지 평가하는 통계적 방법이다. 검정의 귀무가설과 대립가설은 다음과 같다.
+$H_0$ : 비례위험 가정이 성립한다 vs $H_1$ : 비례위험 가정이 성립하지 않는다
+이 검정에서 사용되는 검정통계량은 카이제곱(Chi-square) 분포를 따르며, p-value가 0.05보다 작을 경우 귀무가설을 기각하고 해당 변수에서 비례위험 가정이 성립하지 않는다고 판단한다.
+1.2 R에서의 Schoenfeld 잔차 검정 수행 방법
+Schoenfeld 잔차 검정은 R의 survival 패키지에서 제공하는 cox.zph() 함수를 활용하여 수행할 수 있다. 이 함수는 다변량 Cox 회귀 모델에 포함된 각 변수에 대해 개별적으로 비례위험 가정이 성립하는지 검정하며, 모델 전체의 비례위험 가정에 대한 검정(GLOBAL 검정)도 함께 수행한다.
+
+이러한 검정을 통해 DeepSurv와 TabNet을 사용하기 전에 비례위험 가정이 충족되는지 확인하고, 필요할 경우 시간의존적 효과를 추가하여 모델을 보정하는 과정이 필수적이다.
+
+> NPH_CHECK <- cox.zph(multivariate_model) #Schoenfeld 잔차 검정
+> NPH_CHECK
+                            chisq df     p
+Age_group                    6.38  2 0.041
+type_of_disability_Group2    2.15  1 0.143
+tooth_loss_reason            2.66  1 0.103
+implant_site                 4.18  1 0.041
+prosthesis_type              9.19  2 0.010
+periodontal_diagnosis_group  3.53  1 0.060
+GLOBAL                      33.08  8 6e-05
+Schoenfeld 잔차 검정을 수행한 결과, 다변량 회귀 모델에 포함된 각 변수에 대해 개별적으로 비례위험 가정의 성립 여부를 확인할 수 있었다.
+검정 결과, `Age_group` 변수에서는 비례위험 가정이 성립한다고 해석할 수 있지만, `implant_site` 및 `prosthesis_type` 변수에서는 95% 유의수준에서 비례위험 가정이 성립하지 않는 것으로 나타났다. 또한, GLOBAL 행의 p-value가 매우 작게 나타났으며, 이는 모델 전체적으로 비례위험 가정이 성립하지 않는다는 것을 의미한다.
+
+비례위험 가정 검정을 위한 시각적 확인 (Schoenfeld 잔차 그래프 분석)
+cox.zph()을 활용한 그래프로 비례위험 가정에 대한 시각적인 확인도 가능하다.
+Schoenfeld 잔차 검정을 통해 얻은 그래프는 시간에 따른 계수 $\beta(t)$의 변화를 추정한 결과를 나타낸다.
+* 만약 비례위험 가정이 성립한다면, $\beta(t)$ 값이 시간에 따라 일정해야 하므로 그래프가 수평선을 이루어야 한다.
+* 그래프의 선형 적합(linear fit) 결과는 기울기(slope) = 0을 검정하는 공식적인 검정 결과를 근사하는 역할을 한다.
+검정 결과를 시각적으로 확인한 결과, 다음과 같은 패턴이 관찰되었다.
+* 비례위험 가정을 기각한 Age_group, implant_site, prosthesis_type 변수의 그래프는 시간이 지남에 따라 우상향하는 패턴을 보였다.
+    * 이는 시간이 흐름에 따라 해당 변수의 영향력이 증가하거나 감소한다는 것을 의미하며, 비례위험 가정이 성립하지 않을 가능성이 높음을 시사한다.
+* periodontal_diagnosis_group 변수는 p-value = 0.060으로 귀무가설이 기각되지는 않았지만, 그래프에서 부분적으로 우상향하는 경향이 확인되었다.
+* 반면, type_of_disability와 tooth_loss_reason 변수의 그래프는 시간에 따른 변동이 존재하지만, 전체적으로 볼 때 수평선과 유사한 형태를 보였다.
+    * 그러나, 검정 결과에서는 비례위험 가정이 성립한다고 판정되었음에도 그래프에서 수평선에서 벗어난 형태를 보이는 경우가 있었다.
+    * 이는 비례위험 가정 검정이 선형적인 관계만을 가정하기 때문에, 보다 복잡한 시간 의존적 관계(예: 3차 함수 이상의 형태)가 존재할 경우 검정만으로는 완전히 파악할 수 없음을 의미한다.
+따라서, 비례위험 가정 검정의 결과만을 맹신해서는 안 되며, Schoenfeld 잔차 그래프를 함께 분석하여 해석하는 것이 필수적이다.
+  비례위험 가정 위배 변수에 대한 보정: 시간의존적 효과 추가
+Schoenfeld 잔차 검정을 활용한 그래프 분석 결과, 네 개의 변수(Age_group, implant_site, prosthesis_type, periodontal_diagnosis_group)에서 시간이 지남에 따라 계수 
+$\beta_{j}(t)$가 증가하는 경향을 보였다. 이는 해당 변수들이 시간이 흐름에 따라 위험도에 미치는 영향이 변화한다는 것을 의미한다.
+이러한 결과를 반영하기 위해, 기존 Cox 모델을 다음과 같이 수정할 수 있다.
+\begin{equation} \beta_j(t) = \beta_j + v_j (t - \bar{t}) \end{equation}
+또는 단순한 형태로,
+\begin{equation} \beta_j(t) = \beta_j \cdot t \end{equation}
+위 모델을 적용하면, 시간이 경과함에 따라 특정 독립변수가 위험도에 미치는 영향이 증가하거나 감소하는 패턴을 반영할 수 있다. 예를 들어, $\beta_j > 0$인 경우 해당 변수의 위험 기여도가 시간이 지남에 따라 증가하는 것으로 해석할 수 있다.
+시간의존적 효과 변수 추가 방법
+시간의존적 효과 변수를 추가하는 방법은 Surv() 함수와 coxph() 함수의 tt() 옵션을 활용하여 구현할 수 있다.
+아래 코드는 네 개의 변수(implant_site, prosthesis_type, Age_group, periodontal_diagnosis_group)에 대해 시간의존적 효과를 반영하는 방식으로 Cox 회귀 모델을 구축한 것이다.
+r
+```
+# Step 1: 변수 더미화 (Dummy Variable Transformation)
+df <- df %>%
+  mutate(
+    implant_site_p = ifelse(implant_site == "p", 1, 0),  
+    prosthesis_bridge = ifelse(prosthesis_type == "bridge", 1, 0),
+    prosthesis_single = ifelse(prosthesis_type == "single", 1, 0),
+    age_under_40 = ifelse(Age_group == "Under 40", 1, 0),
+    age_40_59 = ifelse(Age_group == "40-59", 1, 0)
+  )
+
+# Step 2: Cox 모델 적합 (시간의존적 효과 포함)
+cox_model_fixed <- coxph(Surv(fu_total_yr, survival_status) ~ 
+                           type_of_disability_Group2 + tooth_loss_reason + jaw + 
+                           implant_site_p + 
+                           prosthesis_bridge + prosthesis_single + 
+                           age_under_40 + age_40_59 +
+                           tt(implant_site_p) + tt(prosthesis_bridge) + tt(prosthesis_single) +
+                           tt(age_under_40) + tt(age_40_59), 
+                         data = df, tt=function(x,t,...) x*t)
+```
+이 코드에서 tt(variable) 옵션을 추가하여, 해당 변수와 시간(time) 간의 상호작용을 반영하도록 모델을 설정하였다.
+결과 및 해석
+시간의존적 효과를 반영한 Cox 모델을 적합한 결과, Concordance Index (C-index)가 기존 0.763에서 0.804로 증가하였다.(아래 코드 참고) 이는 비례위험 가정 위배 문제를 해결함과 동시에 모델의 예측 성능이 향상되었음을 의미한다.
+따라서, 비례위험 가정이 위배된 변수를 포함하는 Cox 모델을 적용할 때는 Schoenfeld 잔차 검정을 수행한 후, 필요한 경우 시간의존적 효과 변수를 추가하여 모델의 타당성을 높이는 것이 바람직하다.
+
+```
+# Time dependent 변수 추가 전
+multivariate_model <- coxph(Surv(fu_total_yr, survival_status) ~
+                              Age_group + type_of_disability_Group2 + tooth_loss_reason + 
+                              implant_site + prosthesis_type + periodontal_diagnosis_group, data = df)
+
+summary(multivariate_model)
+
+# Time dependent 변수 추가 후
+cox_model_fixed <- coxph(Surv(fu_total_yr, survival_status) ~ 
+                           type_of_disability_Group2 + tooth_loss_reason + jaw + 
+                           implant_site_p + 
+                           prosthesis_bridge + prosthesis_single + 
+                           age_under_40 + age_40_59 +
+                           tt(implant_site_p) + tt(prosthesis_bridge) + tt(prosthesis_single) +
+                           tt(age_under_40) + tt(age_40_59), 
+                         data = df, tt=function(x,t,...) x*t)
+
+summary(cox_model_fixed)
+```
