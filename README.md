@@ -16,8 +16,8 @@
 
 
 # 논문 정보
-## Survival Analysis for Lung Cancer Patients: A Comparison of Cox Regression and Machine Learning Models 
-## How to Cite
+- Survival Analysis for Lung Cancer Patients: A Comparison of Cox Regression and Machine Learning Models 
+- How to Cite
 Paper:
 > Germer, S., Rudolph, C., Labohm, L., Katalinic, A., Rath, N., Rausch, K., Holleczek, B., the AI-CARE Working Group & Handels, H. (2024). Survival analysis for lung cancer patients: A comparison of Cox regression and machine learning models. International Journal of Medical Informatics, 191. https://doi.org/10.1016/j.ijmedinf.2024.105607
 
