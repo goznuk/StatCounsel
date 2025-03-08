@@ -13,9 +13,8 @@ format:
     include-in-header:
       text: |
         \usepackage{fontspec}
-date: "2025-03-06"
+date: "2025-03-08"
 ---
-
 
 
 
@@ -31,7 +30,7 @@ knitr::opts_chunk$set(echo=TRUE)
 
 # 기존 분석 방법의 진단 및 개선 방향
 
-## 1. 데이터 소개 및 기존 분석 결과
+## 1. 데이터 소개
 
 다음 표는 본 분석에서 사용한 Survival_Analysis_consult.sav 파일의 주요 변수를 요약한 것이다. 각 변수는 환자 정보를 비롯하여 임플란트 수술 및 추적 결과 등을 포함한다. 소수의 결측치가 존재하므로 분석 전처리 과정에서 결측치가 있는 데이터행을 삭제하였다. 데이터의 총 길이는 544개이다.
 
@@ -61,7 +60,6 @@ knitr::opts_chunk$set(echo=TRUE)
 |prosthesis_type       |보철 유형               |임플란트 상부 보철 형태            |
 |periodontal_diagnosis_group|치주 진단 그룹     |치주 상태에 따른 그룹 분류         |
 
-<!--기존 연구 결과과-->
 
 ## 2. 기존 연구에 대한 진단
 
@@ -77,7 +75,7 @@ knitr::opts_chunk$set(echo=TRUE)
 
 - 연속형 변수와 이산형 변수를 회귀에 함께 사용하는 경우 가변수를 사용한 이산형 변수에 비해 연속형 변수가 variance 측면에서 불리하다. 따라서, 연속형 변수가 변수 선택과정에서 제외되는 경우가 많다. 이와 같은 상황을 최대한 배제하기 위해, 현재 데이터에서 유일한 연속형 변수인 `Age`의 경우 가변수화나 정규화 변환을 사용할 수 있다. 이는 모형의 해석 용이성과 일반화 성능이 향상에 기여할 것이다.
 
-- 마지막으로 한 사람당 하나의 임플란트만 식립된 것이 아니기에, 같은 개체에 동질성과 다른 개체의 이질성을 반영하는, 즉 여러 개의 임플란트 식립 상황을 반영하는, **Shared Frailty**를 사용하여 분석을 진행하는 것것이 바람직할 것이다.
+- 마지막으로 한 사람당 하나의 임플란트만 식립된 것이 아니기에, 같은 개체에 동질성과 다른 개체의 이질성을 반영하는, 즉 여러 개의 임플란트 식립 상황을 반영하는, **Shared Frailty**를 사용하여 분석을 진행하는 것이 바람직할 것이다.
 
 ---
 
@@ -171,81 +169,80 @@ check_missing <- function(data, covariates, delete = FALSE) {
 
 # 생존곡선 도사 함수
 plot_survival_analysis <- function(data, time_var, event_var, covariate = NULL, alpha = 0.05, ylim = c(0, 1)) {
-  
-  surv_obj <- Surv(time = data[[time_var]], event = data[[event_var]])
-  
+
+  # 생존 객체 명시적 정의
+  data$time_var_internal <- data[[time_var]]
+  data$event_var_internal <- data[[event_var]]
+  surv_obj <- Surv(time = data$time_var_internal, event = data$event_var_internal)
+
   if (is.null(covariate)) {
-    fit <- survfit(surv_obj ~ 1, data = data, conf.type = "plain")
-    
-    plot(
+    fit <- survfit(Surv(time = data$time_var_internal, event = data$event_var_internal) ~ 1, data = data, conf.type = "plain")
+
+    p <- ggsurvplot(
       fit,
-      mark.time = FALSE,
+      data = data,
+      conf.int = TRUE,
+      conf.int.fill = "lightblue",
+      ylim = ylim,
+      ggtheme = theme_minimal(),
+      title = "Kaplan-Meier Estimate with 95% CI",
       xlab = "Time",
       ylab = "Survival Probability S(t)",
-      main = "Kaplan-Meier Estimate with 95% CI",
-      ylim = ylim,
-      lwd = 2
+      legend = "none"
     )
-    
-    lines(fit, conf.int = TRUE, col = "lightblue")
-    
+
+    print(p)
+
   } else {
     significant_vars <- list()
-    
-    # p값 계산 후 유의한 변수만 저장
+
+    # 유의한 공변량 탐색
     for (var in covariate) {
       groups <- as.factor(data[[var]])
       logrank_test <- survdiff(surv_obj ~ groups)
       p_value <- 1 - pchisq(logrank_test$chisq, length(logrank_test$n) - 1)
-      
+
       if (p_value < alpha) {
         significant_vars[[var]] <- p_value
-        #cat(paste0("\n=== Log-rank Test for ", var, " ===\n"))
-        #cat(paste0("p-value: ", signif(p_value, 4), "\n"))
       }
     }
-    
+
     if (length(significant_vars) == 0) {
       cat("\n유의한 변수가 없습니다. (alpha =", alpha, ")\n")
       return(NULL)
     }
-    
+
     num_vars <- length(significant_vars)
     layout_rows <- ceiling(sqrt(num_vars))
     layout_cols <- ceiling(num_vars / layout_rows)
-    
-    op <- par(mfrow = c(layout_rows, layout_cols), mar = c(4, 4, 2, 1))
-    
+
+    plot_list <- list()
+
+    # 유의한 각 변수에 대해 KM 곡선 그리기
     for (var in names(significant_vars)) {
-      p_value <- significant_vars[[var]]
-      groups <- as.factor(data[[var]])
-      group_levels <- levels(groups)
-      group_colors <- rainbow(length(group_levels))
-      
-      fit <- survfit(surv_obj ~ groups, data = data)
-      
-      plot(
+      data$group_var_internal <- as.factor(data[[var]])
+      fit <- survfit(Surv(time_var_internal, event_var_internal) ~ group_var_internal, data = data)
+
+      p <- ggsurvplot(
         fit,
-        mark.time = FALSE,
-        col = group_colors,
+        data = data,
+        risk.table = FALSE,
+        conf.int = FALSE,
+        palette = "Dark2",
+        ylim = ylim,
+        ggtheme = theme_minimal(),
+        title = paste0(var, " (p=", signif(significant_vars[[var]], 3), ")"),
         xlab = "Time",
         ylab = "Survival Probability S(t)",
-        main = paste0(var),
-        ylim = ylim,
-        lwd = 2
+        legend.title = var,
+        legend.labs = levels(data$group_var_internal)
       )
-      
-      legend(
-        "bottomleft",
-        legend = paste0(var, " = ", group_levels),
-        col = group_colors,
-        lty = 1,
-        lwd = 2,
-        cex = 0.8
-      )
+
+      plot_list[[var]] <- p$plot
     }
-    
-    par(op)
+
+    # 여러 그래프를 하나로 배치
+    grid.arrange(grobs = plot_list, nrow = layout_rows, ncol = layout_cols)
   }
 }
 
@@ -360,21 +357,28 @@ cox_snell_diagnosis <- function(data, time_var, event_var, covariates) {
   # 누적위험함수 계산
   cum_hazard <- -log(km_fit$surv)
   
-  # 그래프 출력
-  plot(
-    km_fit$time, cum_hazard, 
-    type = "s", 
-    xlab = "Cox-Snell Residuals", 
-    ylab = "Cumulative Hazard", 
-    main = "Cox-Snell Residuals Model Diagnosis"
+  # 데이터 프레임 생성
+  df <- data.frame(
+    time = km_fit$time,
+    cum_hazard = cum_hazard
   )
-  abline(0, 1, col = "red", lty = 2) # y = x 선
   
-  return(list(
-    cox_model = cox_model,
-    cox_snell_residuals = cs_residuals,
-    km_fit = km_fit
-  ))
+  # ggplot으로 그래프 그리기
+  plot <- ggplot(df, aes(x = time, y = cum_hazard)) +
+    geom_step(color = "steelblue", linewidth = 1.2) +
+    geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed", linewidth = 1) +
+    labs(
+      title = "Cox-Snell Residuals Model Diagnosis",
+      x = "Cox-Snell Residuals",
+      y = "Cumulative Hazard"
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+      axis.title = element_text(size = 14)
+    )
+  
+  return(print(plot))
 }
 ```
 
@@ -494,7 +498,7 @@ data <- data %>%
             "fu_for_survival_yr"))
 ```
 
-분석 목적과 직접 관련 없는 변수(예: `me`, `failure_reason` 등)를 제거하여 최종 분석용 데이터(`data`)를 구성하였다다.
+분석 목적과 직접 관련 없는 변수(예: `me`, `failure_reason` 등)를 제거하여 최종 분석용 데이터(`data`)를 구성하였다.
 
 ## 3. 모델 평가지표 및 분석방법 설명
 
@@ -668,7 +672,9 @@ result %>%
 
 - 데이터의 설명력 측면에서 해석 가능한 AIC, BIC 기준의 식별 모델의 경우, 앞서 진행한 Log-rank test에서 유의 변수로 식별한 **장애 유형**과 **식립 위치**를 공통적으로 유의한 변수로 선택하였다. 또한 AIC, BIC 기준 식별 모델 모두에서 **치아 상실 원인**을 임플란트 탈락에 영향을 주는 요인으로 선택하였다. 이외 AIC 기준 식별 모델에서 **연령층, 보철 유형, 치주 상태** 등을 유의 변수로 선택하였다.
 
-- 예측에 주안점을 둔 C-index와 AUC를 기준으로 모델을 식별한 경우, 설명력에 주안점을 둔 모델들과는 다르게 새로운 변수들이 추가되거나 제거되는 것을 확인할 수 있다. 다만 절대적인 C-index와 AUC의 수치를 보았을 때, 0.5와 1사이에 값을 가지는 평가지표임에도 불구하고 상당히 작은 값을 가지는 모습을 확인할 수 있다. 따라서,  예측력의 측면에서 강점을 가지는 모델이라고 보기 어렵다. 또한 몇몇 후보 모델의 경우에는 데이터 수의 제한으로 인해 AUC가 계산되지 않기도 한다. 따라서 이렇게 식별한 변수들이 임플란트 탈락을 예측하는데 유의한 변수라고 하기는 어렵다.
+- 예측에 주안점을 둔 AUC를 기준으로 모델을 식별한 경우, 설명력에 주안점을 둔 모델들과는 다르게 새로운 변수들이 추가되거나 제거되는 것을 확인할 수 있다. 다만 절대적인 AUC의 수치를 보았을 때, 0.5와 1사이에 값을 가지는 평가지표임에도 불구하고 상당히 작은 값인 0.65를 가지는 모습을 확인할 수 있다. 따라서,  예측력의 측면에서 강점을 가지는 모델이라고 보기 어렵다. 또한 몇몇 후보 모델의 경우에는 데이터 수의 제한으로 인해 AUC가 계산되지 않기도 한다. 따라서 이렇게 식별한 변수들이 임플란트 탈락을 예측하는데 유의한 변수라고 하기는 어렵다.
+
+- C-index를 기준으로 변수를 선택한 경우에는 AUC와는 다르게 0.77의 유의미한 평가 지표를 통해 변수를 식별하였다. 앞서 진행한 Log-rank test의 **장애 유형, 식립 위치, 보철 유형**이 모두 예측에 영향을 주는 주요 요인으로 식별되었고, 이외 **치아 상실 원인, 전신 질환 유무, 치주 진단 그룹**등의 변수가 예측 측면에서 유의 변수로 식별됨을 확인할 수 있다.
 
 #### 4.2.2 Shared Frailty를 고려한 모델
 ```{r, echo=FALSE}
@@ -684,16 +690,16 @@ result_frailty %>%
   kable_styling(latex_options = c("striped"), full_width = FALSE, position = "center")
 ```
 
-- 한 환자에게 다수의 식립 사례가 있는 경우를 반영하기 위해 Shared Frailty를 고려한 모델의 변수 선택을 진행하였으며, 위와 같은 변수 선택 결과를 확인할 수 있다.
-
-- 전반적으로 변수가 Shared Frailty를 고려하지 않은 모델들에 비해 많은 변수들이 선택되는 것을 확인할 수 있다.
+- 한 환자에게 다수의 식립 사례가 있는 경우를 반영하기 위해 Shared Frailty를 고려한 모델의 변수 선택을 진행하였으며, 위와 같은 변수 선택 결과를 확인할 수 있다. 전반적으로 변수가 Shared Frailty를 고려하지 않은 모델들에 비해 많은 변수들이 선택되는 것을 확인할 수 있다.
 
 - 앞선 결과와 마찬가지로 AIC, BIC 기준 식별 모델의 경우 **장애 유형**과 **식립 위치**, **치아 상실 원인**가 공통적으로 유의한 변수로 선택하였으며 추가적으로 **연령층, SPT 준수 여부, 전신 질환, 치주 상태** 변수가 유의 변수로 공통적으로 선택하였다. 이외 **임플란트 직경**의 경우, BIC 기준 모델에서 유의 변수로 선택하였음을 확인할 수 있다.
 
-- 예측에 목적을 둔 두 모델 평가지표로 식별한 유의변수들의 경우, 앞선 Shared Frailty를 고려하지 않은 모델과 동일한 결과를 확인할 수 있다. C-index와 AUC의 수치를 보았을 때, 예측력의 측면에서 강점을 가지는 모델이라고 보기 어려우며, 이렇게 선택한 변수가 임플란트 탈락을 예측하는데 영향을 주는 변수라고 할 수 없다.
+- 예측에 목적을 둔 모델 AUC를 평가지표로 식별한 유의변수들의 경우, 앞선 Shared Frailty를 고려하지 않은 결과와 동일하게 AUC의 값이 0.68로 유의하지 않게 나와 해당 평가지표를 사용하여 식별한 모델은 예측력의 측면에서 강점을 가지는 모델이라고 보기 어렵다. 따라서 이렇게 선택한 변수가 임플란트 탈락을 예측하는데 영향을 주는 변수라고 할 수 없다.
+
+- C-index를 기준으로 변수를 선택한 경우에는  0.81의 유의미한 평가 지표를 통해 변수를 식별하였다. 앞서 진행한 Log-rank test의 **장애 유형, 식립 위치, 보철 유형**이 모두 예측에 영향을 주는 주요 요인으로 식별되었고, 이외 **치아 상실 원인, 임플란트 길이, 치주 진단 그룹**등의 변수가 예측 측면에서 유의 변수로 식별됨을 확인할 수 있다.
 
 ## 5. 기타 이슈
-### 5.1 데이터 부족
+### 5.1 데이터 부족 및 특성에 따른 제한
 ```{r, fig.width=8, fig.height=5, out.width='60%', fig.align='center', echo=FALSE}
 # 예시: AIC 기준 최적 모델 선택
 best_model_vars <- strsplit(result$model[1], " \\+ ")[[1]]
@@ -709,7 +715,7 @@ diagnosis <- cox_snell_diagnosis(
 
 - 앞선 분석 결과를 통해 예측에 목적을 둔 평가지표를 통한 요인 분석이 제대로 작동하지 않음을 확인할 수 있다. 이에 대한 원인 분석을 위해 모델의 적합도를 평가하는 Cox-Snell diagnosis를 진행하였다.  
 
-- 현재 대부분의 모델에서 위와 같은 추정 누적 위험함수가 나타난다. 이는 **데이터 자체의 부족** 및 **데이터 내 실패 사례들의 부족**으로 인한 현상이라고 볼 수 있다. 이와 같은 원인일 경우 실패 사례가 충분한 데이터를  보충함으로써 해결할 수 있을 것이다.
+- 현재 대부분의 식별 모델에서는 위와 같은 형태의 추정 누적 위험함수를 확인할 수 있다. 이는 **데이터 자체의 부족** 및 **데이터 내 실패 사례들이 부족한 특성**으로 인한 현상이라고 볼 수 있다. 임플란트 탈락 사례 자체가 흔치 않은 크게 right censored된 데이터라고 할 수 있으며, 이와 같은 데이터 특성으로 인해 time-dependent한  AUC의 특정 시점의 값이 계산되지 않는 것과 같은 오류가 발생하여 위와 같은 오류가 발생했다. 이와 같은 원인은 실패 사례가 충분한 데이터를 보충함으로써 일정 부분 해결할 수 있을 것이나 데이터 자체의 특성인 실패 사례 부족이 해소되는 것이 아니기에 다음 평가지표를 사용한 요인 분석은 지양하길 권한다.
 
 ---
 
@@ -756,7 +762,7 @@ L_c(\beta) = \prod_{i: E_i=1} \frac{\hat{r}_\beta(x_i)}{\sum_{j \in \mathcal{R}(
 $$
 Loss function을 최소화하는 $\hat{\theta}$를 찾는 과정은 여러 방법이 있지만, 이 논문과 우리의 연구에서는 **Adaptive Moment Estimation (Adam) for the gradient descent algorithm**을 이용했다.
 
-### 2-3. Treatment recommender system (치료 추천 시스템) : CoxPH와 비교했을 때의 장점
+### 2.3. Treatment recommender system (치료 추천 시스템) : CoxPH와 비교했을 때의 장점
 DeepSurv 참고문헌\([9]\)에서 DeepSurv가 CoxPH에 대해 가질 수 있는 장점으로 **치료 추천 시스템**을 설명하고 있다.
 
 임상 연구에서 환자는 개별적인 예후 요인과 받는 치료에 따라 서로 다른 위험 수준을 갖는다. 이를 일반화하여 모든 환자를 $n$개의 치료 그룹 중 하나에 할당한다고 가정한다. 각 치료 $i$에 대해 독립적인 위험 함수 $e^{h_i(x)}$를 설정하면, 전체 위험 함수는 다음과 같이 표현된다.
@@ -782,26 +788,37 @@ $$
 - DeepSurv는 **사전에 치료 상호작용 항을 정의하지 않고** 자동으로 추천 함수를 계산할 수 있는 반면, CoxPH 모델에서는 **치료 상호작용 항이 포함되지 않으면 추천 함수가 일정한 값으로 유지**된다.
 - 치료 간의 상호작용을 발견하는 것은 의학적 지식이 필요하므로, DeepSurv는 CoxPH보다 치료 추천 측면에서 효율적이다.
 
-## 3. 모델의 설명 가능성 (Explainability) 분석
+## 3. TabNet \([11]\)
+
+### 3.1. 개요  
+TabNet은 **2021년 개발된 테이블형 데이터(tabular data) 특화 딥러닝 모델**이다. 기존의 딥러닝 신경망 모델은 음성, 이미지 등 **비정형 데이터** 분석에서 뛰어난 성능을 보였으나, **정형 데이터** 분석에서는 두드러진 성능 향상이 나타나지 않았다. 이에 따라, **테이블형 데이터 분석에 적합한 딥러닝 모델**로서 TabNet이 개발되었다. 기존의 트리 기반 방법과 달리, **순차적 주의(attention) 메커니즘을 활용하여 학습 과정에서 중요한 변수를 선택**한다.  
+
+### 3.2. 특징
+
+- DeepSurv와 유사하게, 생존 분석(survival analysis)에서 **비례위험 가정을 적용하여 위험 함수를 추정**하는 방식으로 활용할 수 있다. \([12])\ 
+
+- RSF 및 DeepSurv와 달리, **TabNet은 생존 분석 분야에서 널리 사용된 모델이 아니며**, 최근 관련 연구들이 점차 등장하고 있다.  
+
+## 4. 모델의 설명 가능성 (Explainability) 분석
 
 위에 기술한 **RSF, DeepSurv**는 **머신러닝, 딥러닝 방법을 사용하므로 전통적인 CoxPH보다 모델 해석이 어렵다**. 따라서 머신러닝 모델의 결과 해석에 도움이 되는 **Feature Importance 기법**을 적용하였다. 참고 논문 \([10]\)에서는 두 가지 주요 설명 가능성 분석 기법을 활용하였다.
 
-### **3.1 Permutation Feature Importance**
+### **4.1 Permutation Feature Importance**
 
 - 대표적인 변수 중요도 평가법 중 하나로, **원본 데이터와 특정 변수를 랜덤하게 섞은 데이터의 모델 성능 차이를 비교하여 변수의 중요도를 측정**한다.
 - 중요한 변수일수록 변형된 데이터에서 모델 성능이 크게 감소하며, 이를 통해 변수별 영향도를 확인할 수 있다.
 - 다중공선성에 취약하다는 단점이 있다.
 
-### **3.2 SHAP (SHapley Additive exPlanations)**
+### **4.2 SHAP (SHapley Additive exPlanations)**
 - 최근에도 많이 연구가 되고 있는 방법 중 하나이다.
 * 변수 간의 모든 가능한 상호작용을 고려하여 특정 변수의 기여도를 계산할 수 있다.
 * 모델이 특정 결과를 도출한 이유를 설명하는 데 활용할 수 있으며, 특히 DeepSurv 등 비선형 모델에서 해석력을 높이는 데 유용하다.
 
-## **4. 모델 평가 지표**
+## **5. 모델 평가 지표**
 
 참고 논문\([10]\)에서는 모델 성능을 평가 지표로서 **Concordance-Index (C-Index), Integrated Brier Score (IBS), Cumulative AUC (Area Under the Curve)**를 활용하였다.
 
-### **4.1 Concordance Index (C-Index, 순위 일관성 지수)**
+### **5.1 Concordance Index (C-Index, 순위 일관성 지수)**
 
 $$
 C = \frac{\sum_{i,j} I(T_i < T_j) I(\hat{r}_i > \hat{r}_j)}{\sum_{i,j} I(T_i < T_j)}
@@ -810,16 +827,16 @@ $$
   C-Index는 **예측된 위험도(risk score)와 실제 생존 시간의 일관성을 측정하는 지표**이다. 두 개의 비교 가능한 샘플 $(i, j)$에 대해, 실제로 **생존 시간이 짧은 샘플이 더 높은 위험도 ** $\hat{r}$ **를 갖는 경우**, 해당 예측이 올바른 것으로 간주한다. $C = 1$이면 모델이 완벽하게 예측한 것이며, $C = 0.5$는 무작위 예측과 동일한 수준을 의미한다.
 
 
-### **4.2 Integrated Brier Score (IBS, 통합 Brier 점수)**
+### **5.2 Integrated Brier Score (IBS, 통합 Brier 점수)**
 
 $$
 IBS = \int_0^{t_{\max}} \frac{1}{N} \sum_{i=1}^{N} (S(t | X_i) - Y_i(t))^2 dt
 $$
 
  
-  Brier Score는 특정 시간 $t$에서 **실제 생존 여부**와 **예측된 생존 확률** 간의 평균 제곱 오차(Mean Squared Error, MSE)를 측정하는 지표이다. censoring(중도 절단) 데이터가 있는 생존 분석에 적합한 지표이며, 특정 시점이 아닌 여러 시점에 걸쳐 측정된 값을 통합하여 시간 전반에 걸친 예측 오류를 평가한다. **0에 가까울수록 모델의 예측 정확도가 높음**을 의미한다.
+Brier Score는 특정 시간 $t$에서 **실제 생존 여부**와 **예측된 생존 확률** 간의 평균 제곱 오차(Mean Squared Error, MSE)를 측정하는 지표이다. censoring(중도 절단) 데이터가 있는 생존 분석에 적합한 지표이며, 특정 시점이 아닌 여러 시점에 걸쳐 측정된 값을 통합하여 시간 전반에 걸친 예측 오류를 평가한다. **0에 가까울수록 모델의 예측 정확도가 높음**을 의미한다.
 
-### **4.3 Cumulative Area Under the Curve (Cumulative AUC, 누적 AUC)**
+### **5.3 Cumulative Area Under the Curve (Cumulative AUC, 누적 AUC)**
 
 $$
 AUC(t) = P(\hat{r}_i > \hat{r}_j | T_i \leq t, T_j > t)
@@ -827,9 +844,9 @@ $$
 
   누적 AUC는 특정 시간 $t$까지 이벤트(사건)가 발생한 개체와 아직 생존한 개체 간의 위험도(risk score) 차이를 비교하는 지표이다. 참고 논문\([10]\)에서는 $AUC(t)$ 대신 시간에 따른 $AUC(t)$의 평균치인 **mean AUC**를 지표로 활용하였다.
 
-## **5. 모델 학습 절차 \([10]\)**
+## **6. 모델 학습 절차 \([10]\)**
 
-### **5.1 전처리**
+### **6.1 전처리**
 머신러닝 방법 적용 전, 범주형 변수들을 **One-hot encoding**을 통해 모델 학습에 적합한 형태로 변환했다.
 
 - **One-hot encoding:**  
@@ -837,7 +854,7 @@ $$
   예) `"A", "B", "C"` → `[1,0,0]`, `[0,1,0]`, `[0,0,1]`
 
 
-### **5.2 하이퍼파라미터 최적화**
+### **6.2 하이퍼파라미터 최적화**
 
 각 모델의 최적 성능을 찾기 위해 **하이퍼파라미터 최적화**를 수행하였다. 본 분석에서는 Python의 **Optuna** 라이브러리를 사용하여 하이퍼파라미터 탐색을 진행하였다.
 
@@ -853,19 +870,19 @@ Optuna의 설정값은 **`config.yaml`** 파일에서 정의되어 있으며, �
 knitr::include_graphics('figure_learning.png')
 ```
 
-### **5.3 Feature Importance 분석**
+### **6.3 Feature Importance 분석**
 
 각 머신러닝 모델의 **Permutation Feature Importance**와 **SHAP 값(Shapley Additive Explanations, SHAP value)**을 활용하여 변수 중요도를 분석한다. **Permutation Feature Importance**는 테이블 형태로 제시하여 각 변수의 상대적 중요도를 수치적으로 확인하고, **SHAP 값**은 **beeswarm plot**을 사용하여 모델이 특정 예측을 수행하는 과정에서 개별 변수가 미치는 영향을 시각적으로 분석한다. 모델별 최종 학습 결과 중 5-fold cross-validation의 테스트 성능이 가장 우수한 fold의 결과를 선택하여 분석을 진행한다.
 
-## **6. RSF 학습 결과**
+## **7. RSF 학습 결과**
 
-### **6.1 RSF 최적 하이퍼파라미터 값**
+### **7.1 RSF 최적 하이퍼파라미터 값**
 
 |`n_estimators`|`min_samples_leaf`|`max_features`|`max_depth`|
 |:-------------|:-----------------|:-------------|:----------|
 |704           |20                |11            |5          |
 
-### **6.2 5-fold Cross Validation 성능 결과**
+### **7.2 5-fold Cross Validation 성능 결과**
 
 ```{r, echo=FALSE, show_col_types = FALSE}
 
@@ -889,15 +906,15 @@ results %>%
 
 **모델 최종 scores**
 
-|`c_index`|`mean_auc`|`ibs`|
+|`C-index`|`Mean AUC`|`IBS`|
 |:------- |:---------|:---------|
 |0.705071|0.771574|0.046981|
 
-### **6.3 Feature Importance**
+### **7.3 Feature Importance**
 
 위의 결과를 이용해 **fold 3**의 변수 중요도를 분석했다.
 
-#### **6.3.1 Permutation Feature Importance**
+#### **7.3.1 Permutation Feature Importance**
 
 ```{r, echo=FALSE, show_col_types = FALSE}
 RSF_permutation_importances_fold_3 <- read.csv("RSF_permutation_importances_fold_3.csv")
@@ -912,7 +929,7 @@ RSF_permutation_importances_fold_3 %>%
 
 `X`는 변수명, `importances_mean`, `importances_std`는 각각 15번 계산한 permutation feature importance의 평균과 표준편차이다. `implant_site_p`, `prosthesis_type_single`, `tooth_loss_reason_perio` 순으로 변수 중요도가 높게 측정되었다. 변수 중요도가 0에 가깝거나, 음수가 나오는 변수들도 여럿 존재함을 확인할 수 있다.
 
-#### **6.3.2 SHAP values**
+#### **7.3.2 SHAP values**
 
 ```{r, echo=FALSE, fig.align='center', out.width="70%"}
 knitr::include_graphics('RSF_beeswarm_fold_3.png')
@@ -925,17 +942,17 @@ RSF 모델에선 범주형 변수의 값에 따라 예측값의 영향이 명확
 
 
 
-## **7. DeepSurv 학습 결과**
+## **8. DeepSurv 학습 결과**
 
-### **7.1 DeepSurv 최적 하이퍼파라미터 값**
+### **8.1 DeepSurv 최적 하이퍼파라미터 값**
 
 |`batch_size`|`inner_dim`|`lr`|`weight_decay`|
 |:-----------|:----------|:---|:-------------|
 |1024        |64         |$10^{-5}$|0.01     |
 
-  `config.yaml`에 제시된 `batch_size`는 512, 1024, 1770, 3540이다. 현 데이터의 개수는 약 540개이므로 유의미한 `batch_size`를 찾을 수 없다.
+  `config.yaml`에 제시된 `batch_size`는 512, 1024, 1770, 3540이다. 현 데이터의 개수는 약 540개이므로 유의미한 `batch_size`를 찾기는 어렵다.
 
-### **7.2 5-fold Cross Validation 성능 결과**
+### **8.2 5-fold Cross Validation 성능 결과**
 
 ```{r, echo=FALSE, show_col_types = FALSE}
 results <- data.frame(
@@ -954,19 +971,19 @@ results %>%
 
 **모델 최종 scores**
 
-|`c_index`|`mean_auc`|`ibs`|
+|`C-index`|`Mean AUC`|`IBS`|
 |:-------|:-------|:---------|
 |0.521925|0.460670|0.064590  |
 
 
-### **7.3 Feature Importance**
+### **8.3 Feature Importance**
 
 위의 결과를 이용해 **fold 3**의 변수 중요도를 분석했다.
 
-#### **7.3.1 Permutation Feature Importance**
+#### **8.3.1 Permutation Feature Importance**
 
-```{r, echo=FALSE, show_col_types = FALSE}
-DeepSurv_permutation_importances_fold_3 <- read_csv("DeepSurv_permutation_importances_fold_3.csv")
+```{r, echo=FALSE, message=FALSE}
+DeepSurv_permutation_importances_fold_3 <- read_csv("DeepSurv_permutation_importances_fold_3.csv", show_col_types=FALSE)
 
 DeepSurv_permutation_importances_fold_3 %>%
   rename(X = 1) %>% 
@@ -978,7 +995,42 @@ DeepSurv_permutation_importances_fold_3 %>%
 
 `jaw_mx`, `Sex_M`, `type_of_disability_Group2_Non-Mental` 순으로 변수 중요도가 높게 측정되었다. RSF와 마찬가지로, 변수 중요도가 0에 가깝거나, 음수가 나오는 변수들도 여럿 존재함을 확인할 수 있다.
 
-#### **7.3.2 SHAP values**
+#### **8.3.2 SHAP values**
+
+```{r, echo=FALSE, fig.align='center', out.width="70%"}
+knitr::include_graphics('DeepSurv_beeswarm_fold_3.png')
+```
+
+  DeepSurv 모델에서는 RSF에서 Permutation Feature Importance가 낮았던 `jaw_mx` 변수가 SHAP 값에서 높은 중요도를 보였다. 분석 결과, `jaw`가 `mx`일 때 risk가 증가하는 경향을 나타냈다. 또한, `implant_diameter` 변수의 경우 `regular` 그룹에 속할 때 위험도가 낮아졌으며, `wide` 그룹에서도 유사한 경향을 보였다. `periodontal_diagnosis_group` 변수는 `stage 3,4`일 때 오히려 위험도가 감소하는 패턴을 보였으며, `type_of_disability` 변수는 `Non-Mental` 그룹에 속할 때 위험도가 높게 나타났다.  
+
+  한편, RSF와 DeepSurv 모델 간 Permutation Feature Importance와 SHAP 값의 중요도 순위 차이가 크게 나타났다.  예를 들어, `Sex` 변수는 Permutation Feature Importance에서 2번째로 중요도가 높았지만, SHAP 분석에서는 6번째에 위치했다. 이처럼 두 지표는 산출 방식이 다르므로, 변수의 중요도 순위가 달라질 수 있다.
+  
+## **9. TabNet 학습 결과**
+
+### **9.1. TabNet 최적 하이퍼파라미터 값**
+
+### **9.2 5-fold Cross Validation 성능 결과**
+
+### **9.3 Feature Importance**
+
+위의 결과를 이용해 **fold 3**의 변수 중요도를 분석했다.
+
+#### **9.3.1 Permutation Feature Importance**
+
+```{r, echo=FALSE, message=FALSE}
+DeepSurv_permutation_importances_fold_3 <- read_csv("DeepSurv_permutation_importances_fold_3.csv", show_col_types=FALSE)
+
+DeepSurv_permutation_importances_fold_3 %>%
+  rename(X = 1) %>% 
+  mutate_if(is.numeric, round, 5) %>%
+  mutate(across(everything(), ~ifelse(is.na(.), "-", .))) %>%
+  kbl(booktabs = TRUE) %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"), full_width = FALSE)
+```
+
+`jaw_mx`, `Sex_M`, `type_of_disability_Group2_Non-Mental` 순으로 변수 중요도가 높게 측정되었다. RSF와 마찬가지로, 변수 중요도가 0에 가깝거나, 음수가 나오는 변수들도 여럿 존재함을 확인할 수 있다.
+
+#### **9.3.2 SHAP values**
 
 ```{r, echo=FALSE, fig.align='center', out.width="70%"}
 knitr::include_graphics('DeepSurv_beeswarm_fold_3.png')
@@ -988,20 +1040,20 @@ knitr::include_graphics('DeepSurv_beeswarm_fold_3.png')
 
   한편, RSF와 DeepSurv 모델 간 Permutation Feature Importance와 SHAP 값의 중요도 순위 차이가 크게 나타났다.  예를 들어, `Sex` 변수는 Permutation Feature Importance에서 2번째로 중요도가 높았지만, SHAP 분석에서는 6번째에 위치했다. 이처럼 두 지표는 산출 방식이 다르므로, 변수의 중요도 순위가 달라질 수 있다.
 
-## **8. 비례위험 가정 검정**
+**모델 최종 scores**
+
+
+
+## **9. 머신러닝 방법론 유의사항**
 
 DeepSurv와 CoxPH는 **비례위험 가정(Proportional Hazards Assumption)**을 기반으로 한 생존 분석 모델이다. 반면, **Random Survival Forest(RSF)**는 비례위험 가정을 요구하지 않는다. 따라서, **DeepSurv와 TabNet을 적용하기 전에 비례위험 가정이 충족되는지 검증**하는 과정이 필요하다. 이를 통해 **모델 사용의 타당성을 높이고, 분석 결과의 신뢰성을 확보**할 수 있다.
 
 
-### **8.1 비례위험 가정에 대한 통계적 검정**
+### **9.1 비례위험 가정에 대한 통계적 검정**
 
-비례위험 가정을 검정하는 대표적인 방법 중 하나가 **Schoenfeld 잔차 검정(Schoenfeld Residual Test)**이다.
-
-#### **Schoenfeld 잔차 검정 가설**
-* 귀무가설 $H_0$ : **비례위험 가정이 성립**한다.  
-* 대립가설 $H_1$ : **비례위험 가정이 성립하지 않는다.**
-
-이 검정에서 사용되는 검정통계량은 카이제곱(Chi-square) 분포를 따르며, p-value가 0.05보다 작을 경우 귀무가설을 기각하고 해당 변수에서 비례위험 가정이 성립하지 않는다고 판단한다.
+* 비례위험 가정을 검정하는 대표적인 방법 중 하나가 **Schoenfeld 잔차 검정(Schoenfeld Residual Test)**이다.
+* 귀무가설 $H_0$ : **비례위험 가정이 성립**한다. vs 대립가설 $H_1$ : **비례위험 가정이 성립하지 않는다.**
+* 이 검정에서 사용되는 검정통계량은 카이제곱(Chi-square) 분포를 따르며, p-value가 0.05보다 작을 경우 귀무가설을 기각하고 해당 변수에서 비례위험 가정이 성립하지 않는다고 판단한다.
 
 #### **R에서의 Schoenfeld 잔차 검정 수행 방법**
 
@@ -1018,7 +1070,7 @@ multivariate_model <- coxph(Surv(fu_total_yr, survival) ~
 NPH_CHECK <- cox.zph(multivariate_model) 
 ```
 
-```{r}
+```{r, echo=FALSE}
 
 # 데이터 생성
 chisq_results <- data.frame(
@@ -1036,7 +1088,7 @@ kable(chisq_results, caption = "Schoenfeld 잔차 검정 결과")
 
 검정을 통해, 다변량 CoxPH에 포함된 각 변수에 대해 개별적으로 비례위험 가정의 성립 여부를 확인했다. `Age_group` 변수에서는 95% 유의수준에서 비례위험 가정이 성립하지 않는 것으로 나타났다. 또한, GLOBAL 행의 p-value가 작게 나타났으며, 이는 모델 전체적으로 비례위험 가정이 성립하지 않는다는 것을 의미한다.
 
-### **8.2 Schoenfeld 잔차 검정 결과의 시각적 해석**
+### **9.2 Schoenfeld 잔차 검정 결과의 시각적 해석**
 
 ```{r, fig.align='center', echo=FALSE, message=FALSE}
 
@@ -1060,10 +1112,9 @@ ggplot(schoenfeld_residuals, aes(x = Time, y = Residual)) +
   labs(title = "Schoenfeld Residuals for Proportional Hazards Assumption",
        x = "Time",
        y = "Scaled Schoenfeld Residuals") +
+  
+  theme_minimal() +
   theme(legend.position = "none")
-
-
-
 ```
 
 `cox.zph()`을 활용한 그래프로 비례위험 가정에 대한 시각적인 확인도 가능하다. `cox.zph()`을 통해 얻은 그래프는 시간에 따른 계수 $\beta(t)$의 변화를 추정한 결과를 나타낸다.
@@ -1075,7 +1126,7 @@ ggplot(schoenfeld_residuals, aes(x = Time, y = Residual)) +
  따라서, 비례위험 가정 검정의 결과뿐만 아니라 Schoenfeld 잔차 그래프를 함께 분석하여 해석하는 것이 바람직하다.
 
 
-### **8.3 비례위험 가정 위배 변수에 대한 보정 (시간의존적 효과 추가)**
+### **9.3 비례위험 가정 위배 변수에 대한 보정 (시간의존적 효과 추가)**
 
 Schoenfeld 잔차 검정을 활용한 결과, `Age_group`에서 시간이 지남에 따라 **계수 $\beta(t)$ 가 증가**하는 경향을 보였다. 이는 해당 변수들이 시간이 흐름에 따라 위험도에 미치는 영향이 변화한다는 것을 의미한다. 이를 반영하기 위해, $j$번째 변수에 대해 기존 CoxPH 모델을 다음과 같이 수정할 수 있다.
 
@@ -1130,7 +1181,7 @@ cox_model_fixed <- coxph(Surv(fu_total_yr, survival) ~ age_under_40 + age_btw_40
 아래는 Python의 random seed = 1234 기준 두 모형의 C-Index를 5-fold cross validation을 통해 확인한 결과이다. 위의 결과와는 다르게, 여기서는 시간의존적 효과 변수를 추가하지 않은 것이 예측력을 높일 수 있음을 시사한다. 즉, **설명력에서는 시간의존적 효과 변수 추가, 예측력 측면에서는 기존 모형이 더 좋음을 의미한다.**
 
 
-```{r,echo=FALSE, warning = FALSE}
+```{r,include=FALSE, eval=FALSE, warning = FALSE}
 
 # 1️⃣ Python에서 생성한 데이터 불러오기
 train_test_split <- read_csv("train_test_split.csv", show_col_types = FALSE)
@@ -1193,7 +1244,7 @@ for (fold in unique_folds) {
 ```
 
 
-| Model                        | Average Concordance Index |
+| Model                        | Average C-index |
 |------------------------------|--------------------------|
 | Fixed Model                  | 0.7162                   |
 | Time-Dependent Model         | 0.6911                   |
@@ -1223,4 +1274,10 @@ for (fold in unique_folds) {
 9. Katzman, Jared L., et al. "DeepSurv: personalized treatment recommender system using a Cox proportional hazards deep neural network." BMC medical research methodology 18 (2018): 1-12. https://doi.org/10.1186/s12874-018-0482-1
 
 10. Germer S, Rudolph C, Labohm L, Katalinic A, Rath N, Rausch K, Holleczek B; AI-CARE Working Group; Handels H. Survival analysis for lung cancer patients: A comparison of Cox regression and machine learning models. Int J Med Inform. 2024 Nov;191:105607. doi: 10.1016/j.ijmedinf.2024.105607. Epub 2024 Aug 26. PMID: 39208536.
+
+11. Arik, S. Ö., & Pfister, T. (2021). TabNet: Attentive Interpretable Tabular Learning. Proceedings of the AAAI Conference on Artificial Intelligence, 35(8), 6679-6687. https://doi.org/10.1609/aaai.v35i8.16826
+
+12. H. Qi, Y. Hu, R. Fan and L. Deng, "Tab-Cox: An Interpretable Deep Survival Analysis Model for Patients With Nasopharyngeal Carcinoma Based on TabNet," in IEEE Journal of Biomedical and Health Informatics, vol. 28, no. 8, pp. 4937-4950, Aug. 2024, doi: 10.1109/JBHI.2024.3397955.
+keywords: {Analytical models;Data models;Predictive models;Cancer;Hazards;Deep learning;Feature extraction;Survival analysis;disease prediction;machine learning algorithms},
+
 
