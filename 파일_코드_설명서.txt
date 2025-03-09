@@ -1,0 +1,55 @@
+############ 보고서 파일 ############
+통계상담_최종보고 라는 이름으로 있는 파일이 보고서 파일입니다.
+
+pdf파일이 들어가 있으며, .qmd 파일은 해당 pdf파일을 제작 시 사용한 마크다운 파일입니다.
+따라서, pdf파일 안 모든 코드들은 .qmd 파일에서 확인 가능합니다.
+
+
+############ 주요 코드 파일 ############
+
+	⁃	function_rsf.ipynb, function_deepsurv.ipynb, function_tabnet.ipynb이 주요 결과물들을 재현할 수 있는 코드 파일입니다.
+	⁃	셀 [1] ~ [4]에는 함수 정의 및 라이브러리 호출 관련 코드가 있고, 셀 [5]에서 데이터 전처리 후 셀 [6]에서 함수를 실행합니다.
+	⁃	prepare_모델이름_data()에 입력하는 데이터프레임 조건은 다음과 같습니다: 
+	⁃		y에는 성공/실패 여부가 0 또는 1로 들어가 있어야 한다. 
+	⁃		함수를 작동시킬 때, 성공/실패 컬럼의 이름, 시간의 컬럼 이름을 알아야 한다.
+	⁃		전체 데이터셋에 결측치가 없어야 한다. (Imputation 완료 후)
+	⁃		분석에 필요한 변수만이 들어간 dataset을 사용한다.
+	⁃	TabNet, DeepSurv같은 경우 학습이 오래 걸리는 단점이 있습니다. 특히 TabNet의 학습이 굉장히 오래 걸립니다. 추가 연구가 필요하면, 병렬처리를 통해 코드 실행 속도를 높일 필요가 있습니다.
+
+	⁃	processed_survival_data_modified.csv: 우리의 데이터에서 Age 변수를 3 그룹(young, middle-aged, old)으로 범주화한 파일입니다.
+
+############ figure 폴더 ############
+
+보고서에 들어 간 사진 및 결과표들을 모아 놓은 파일입니다.
+
+
+############ 논문 파일 설명 ############
+
+Germer S, Rudolph C, Labohm L, Katalinic A, Rath N, Rausch K, Holleczek B; AI-CARE Working Group; Handels H. Survival analysis for lung cancer patients: A comparison of Cox regression and machine learning models. Int J Med Inform. 2024 Nov;191:105607.
+
+앞서 기술한 주요 파일들은 위 논문을 기반으로 만들어졌습니다. 앞선 세 파일 (function_rsf.ipynb, function_deepsurv.ipynb, function_tabnet.ipynb) 을 인용 시 해당 논문의 인용이 필요합니다.
+논문의 주요 파일들에 대한 설명은 다음과 같습니다.
+
+	⁃	`parametrized_training_kfolds.py`, `parametrized_evaluation_kfolds.py` : 모델별 주요 학습 과정을 만들기 위해 활용한 논문의 베이스라인 코드입니다. 우리의 함수에 직접 사용되지는 않지만, 논문의 연구 과정을 재현해 놓은 파일이기 때문에 참고하면 좋습다.
+
+	⁃	`config.yaml` : `optuna()` 과정에서 사용할 하이퍼파라미터의 범위가 지정된 파일입니다. RSF, DeepSurv, TabNet 각각 학습 시 사용한 하이퍼파라미터의 범위가 설정되어 있습니다. 
+	⁃	데이터가 부족한 상황이 생기면 DeepSurv와 TabNet에서 `batch_size` 등을 조절해야 합니다.
+	⁃	`config.yaml`에 제시된 DeepSurv의 `batch_size`는 512, 1024, 1770, 3540입니다. 현 데이터는 약 540개이므로 유의미한 `batch_size`를 찾기는 어렵습니다. 따라서 `batch_size`의 범위를 16, 32, 64, 128로 설정하였습니다.
+	⁃	TabNet의 보다 정확한 학습을 위해 `lr`(learning rate)에 0.005, 0.01, 0.05를 추가하여 학습했고, 1.e-4는 너무 작아 제외하였습니다. TabNet의 `batch_size`는 하이퍼파라미터가 아닌 지정된 값을 사용했습니다. 논문에서는 `TabNet`의 기본 설정 값인 1024를 사용했지만, 현 데이터는 약 540개이므로 `batch_size`는 16으로 고정하고 학습하였습니다.
+
+	⁃	`evaluation.py` : 모델 성능 지표를 출력할 때 사용합니다. 
+	⁃	`evaluate_survival_model`은 우리가 선택한 모델에 대해 C-Index, IBS, mean AUC를 출력합니다.
+	⁃		특이사항 : IBS 계산을 위해서는 우리의 데이터 안에서 고르게 time point들을 선택해야 합니다. 본 논문에서는 학습 데이터에서 `fail`이 관측된 데이터 중 시간의 하위 10%부터 최댓값까지의 시간 범위에서 5% quantile마다 time point를 설정했습니다. (`np.linspace(0.1, 1, 20)`)
+	⁃		그러나, 우리의 코드에서는 `fail`의 관측 수가 부족하므로 잘 계산이 되지 않는 문제가 발생하여, 테스트 데이터 범위 내에서 균등하게 time point를 생성했습니다. (최댓값 제외)
+	⁃		`PartialLogLikelihood`는 DeepSurv, TabNet에서의 loss function으로 활용합니다.
+
+	⁃	`models.py` : 논문에서 사용된 DeepSurv와 TabNet 모델이 구현되어 있습니다.
+	⁃		`MinimalisticNetwork`에 논문에서 사용한 DeepSurv 모델이, `TabNetSurvivalRegressor`에 논문에서 사용한 TabNet 모델이 구현되어 있습니다.
+
+	⁃	`training_survival_analysis.py` : DeepSurv 모델 학습에 필요한 `train_model` 함수가 정의되어 있습니다.
+	⁃		특이사항: `train_model` 안 random seed 는 42로 설정되어 있습니다. 저희 모델 전반에 사용된 random seed 와는 독립적인 수치이므로 그대로 사용해도 무방합니다.
+
+여기까지가 주요 파일들에 대한 설명입니다. 이 밖의 파일들은 논문의 세팅에서 필요한 파일들이고, 우리의 경우에는 사용이 되지 않는 경우도 있습니다. 데이터 세팅이 바뀜에 따라 모두 필요한 파일들이기 때문에 원본과 대조해가며 수정할 필요가 있습니다.
+
+이외 논문에 사용된 파일 : `data_loading.py`, `data_preprocessing.py`, `environment.yaml`, `kaplan_meier_curves.py`
+
