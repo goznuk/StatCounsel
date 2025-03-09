@@ -1,0 +1,98 @@
+base_path: /home/kjh1017/KJH/통계상담_황인경의뢰자
+device: cuda:0
+registry: "5"
+entity: "lung"
+ontoserver_url: "https://r4.ontoserver.csiro.au/fhir"
+rsf:
+  n_estimators: 
+    distribution: int_uniform
+    min: 10
+    max: 1000
+  min_samples_split: 
+    distribution: int_uniform
+    min: 1
+    max: 10
+  min_samples_leaf:
+    distribution: int_uniform
+    min: 5
+    max: 30
+  max_features:
+    distribution: int_uniform
+    min: 2
+    max: len(selected_features)
+  max_depth:
+    distribution: int_uniform
+    min: 2
+    max: 15 #7
+  max_samples:
+    distribution: float_uniform
+    min: 0.5
+    max: 1.0
+cox:
+  alpha:
+    distribution: float_uniform
+    min: 0.0
+    max: 1.0
+  tol:
+    distribution: float_uniform
+    min: 1.e-9
+    max: 1.e-2
+  ties:
+    - breslow
+    - efron
+deep_surv:
+  batch_size: 
+    - 512
+    - 1024
+    - 1770
+    - 3540
+  inner_dim:
+    - 8
+    - 16
+    - 32
+    - 64
+  lr:
+    - 1.e-3
+    - 5.e-4
+    - 1.e-4
+    - 5.e-5
+    - 1.e-5
+  weight_decay:
+    - 0.0
+    - 1.e-3
+    - 1.e-2
+    - 1.e-1
+    - 1
+    - 5
+tabnet:
+  n_d:
+    min: 8
+    max: 32
+  n_steps:
+    min: 2
+    max: 8
+  gamma: 
+    - 1.0
+    - 1.2
+    - 1.5
+    - 1.7
+    - 2.0
+  lr:
+    #- 1.e-4
+    - 1.e-3
+    - 2.e-2
+    - 1.e-1
+    - 5.e-3  # 0.005 (추가)
+    - 1.e-2  # 0.01 (추가)
+    - 5.e-2  # 0.05 (추가)
+
+  weight_decay:
+    - 1.e-5
+    - 1.e-3
+    - 1.e-1
+    - 1
+    - 5
+  mask_type:
+    - entmax
+    - sparsemax
+
