@@ -7,7 +7,7 @@ pdf파일이 들어가 있으며, .qmd 파일은 해당 pdf파일을 제작 시 
 
 ############ 주요 코드 파일 ############
 
-	⁃	function_rsf.ipynb, function_deepsurv.ipynb, function_tabnet.ipynb이 주요 결과물들을 재현할 수 있는 코드 파일입니다.
+	⁃	RSF.ipynb, DeepSurv.ipynb, TabNet.ipynb이 주요 결과물들을 재현할 수 있는 코드 파일입니다.
 	⁃	셀 [1] ~ [4]에는 함수 정의 및 라이브러리 호출 관련 코드가 있고, 셀 [5]에서 데이터 전처리 후 셀 [6]에서 함수를 실행합니다.
 	⁃	prepare_모델이름_data()에 입력하는 데이터프레임 조건은 다음과 같습니다: 
 	⁃		y에는 성공/실패 여부가 0 또는 1로 들어가 있어야 한다. 
@@ -27,7 +27,7 @@ pdf파일이 들어가 있으며, .qmd 파일은 해당 pdf파일을 제작 시 
 
 Germer S, Rudolph C, Labohm L, Katalinic A, Rath N, Rausch K, Holleczek B; AI-CARE Working Group; Handels H. Survival analysis for lung cancer patients: A comparison of Cox regression and machine learning models. Int J Med Inform. 2024 Nov;191:105607.
 
-앞서 기술한 주요 파일들은 위 논문을 기반으로 만들어졌습니다. 앞선 세 파일 (function_rsf.ipynb, function_deepsurv.ipynb, function_tabnet.ipynb) 을 인용 시 해당 논문의 인용이 필요합니다.
+앞서 기술한 주요 파일들은 위 논문을 기반으로 만들어졌습니다. 앞선 세 파일 (RSF.ipynb, DeepSurv.ipynb, TabNet.ipynb) 을 인용 시 해당 논문의 인용이 필요합니다.
 논문의 주요 파일들에 대한 설명은 다음과 같습니다.
 
 	⁃	`parametrized_training_kfolds.py`, `parametrized_evaluation_kfolds.py` : 모델별 주요 학습 과정을 만들기 위해 활용한 논문의 베이스라인 코드입니다. 우리의 함수에 직접 사용되지는 않지만, 논문의 연구 과정을 재현해 놓은 파일이기 때문에 참고하면 좋습다.
